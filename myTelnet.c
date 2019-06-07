@@ -1,3 +1,13 @@
+/*
+	This implementation aims to developed skills on C and usage of the socket API for TCP.
+	We have kept to ensure our code enjoyable to read through comments in order
+	to facilitate reuse of any part of this code quickly.
+
+	The program allows a user to execute commands on a distant machine. 
+
+*/
+
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
