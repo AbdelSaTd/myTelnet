@@ -1,0 +1,5 @@
+The objective of this work is to deliver a program allowing a user to execute command from a distant machine using TCP/IP. 
+
+Exigences :
+    • Secure the input
+    • Ensure that execute "exit" close the connextion and ends the command

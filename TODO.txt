@@ -1,0 +1,3 @@
+- Ensure the client have access on the distant server
+- Optimize compilation through Makefile
+
