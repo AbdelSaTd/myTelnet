@@ -3,7 +3,10 @@
 	We have kept to ensure our code enjoyable to read through comments in order
 	to facilitate reuse of any part of this code quickly.
 
-	The program allows a user to execute commands on a distant machine. 
+	The program allows an user to execute commands on a distant machine. 
+
+	@Author : Abdel Saïd TARNAGDA, student at INSA Toulouse (National Applied Science Institute Toulouse)
+	@Licence : MIT Licence
 
 */
 
