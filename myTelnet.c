@@ -22,11 +22,17 @@
 
 #define READ_MAX 200
 #define STR_MAX 200
-#define RESULT_MAX 500
+#define STR_MAXX 500
+#define USERNAME_MAX 50
 
 struct telnetParams {
 	char* username;
 	char* machinename;
+};
+
+struct TELNET_PACKET{
+	int code; // Give the result of the execution when a command was send, or verification code
+	char* payload;
 };
 
 /* 
@@ -35,8 +41,9 @@ struct telnetParams {
 
 //Socket
 int sock_local;
+int sock_local_conn;
 int ports[] = {23, 8500, 8501}; // Lists of usable port for myTelnet
-
+int role=1; // 1 => executer (by default), 0 => server
 
 
 int running = 1;
@@ -44,6 +51,7 @@ char usage[] = "usage: myTelnet -s | user_name@host_name\n";
 
 //Sur Ubuntu
 char tmp_folder_path[] = "/tmp/";
+char abs_path_users_list[] = "/etc/passwd";
 
 void printUsage(){
 	printf("%s", usage);
@@ -96,28 +104,57 @@ int getTelnetParams(struct telnetParams* p, char* str){
 	return 0;
 }
 
-void my_printf(char *s){
-	int i=0;
-	while(s[i] != EOF && s[i] != '\0'){
-		printf("%c", s[i]);
-	}
+void telnetPacketParser(char *string_packet, struct TELNET_PACKET *tp){
+	char *ptr;
+
+	ptr = strtok(string_packet, "|");
+	tp->code = atoi(ptr);
+
+	ptr = strtok(NULL, "|");
+	tp->payload = ptr;
 }
 
-void quit_myTelnel(int sock_local)
+void close_socket(int sock_local)
 {
-	printf("Bye-bye ^^\n");
 
+	printf("Bye-bye ^^\n");
 	if(shutdown(sock_local, 2) == -1)
 	{
-		perror("Echec shutdown(...) ");
+		perror("Fail shutdown(...) ");
 	}
 	if(close(sock_local) == -1)
 	{
-		perror("Echec close(..) [socket local] ");
+		perror("Fail close(..)");
 	}
 }
 
+void quit_myTelnel(){
+	if(role)
+		close_socket(sock_local);
+	else
+		close_socket(sock_local_conn);
+	
+}
 
+int authentification(char* ident){
+	FILE* f;
+	char line[USERNAME_MAX];
+	char * ptr;
+	int res = 0;
+	if( (f = fopen(abs_path_users_list, "r")) == NULL){
+		printf("Cannot open the users list file : < %s >\n", abs_path_users_list);
+		quit_myTelnel(sock_local);	
+	}
+
+	while( fgets(line, USERNAME_MAX, f) && !res){
+		ptr = strtok(line, ":");
+		//printf(" <%s> is checked !\n", ptr);
+		res = strcmp(ptr, ident); // strcmp returns 0 when equality others values else
+		res = res ? 0 : 1; // We give 1 to res when equality and 0 else
+	}
+
+	return res;
+}
 
 
 int main(int argc, char **argv) {
@@ -132,7 +169,7 @@ int main(int argc, char **argv) {
 	
 
 	int c;
-	int role=1; // 1 => executer (by default), 0 => server
+	
 	extern char *optarg;
 	//extern int optind;
 
@@ -153,7 +190,7 @@ int main(int argc, char **argv) {
 
 
 	if ((sock_local = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		perror("Echec socket ");
+		perror("Fail of socket ");
 		exit(-1);
 	}
 	
@@ -162,9 +199,9 @@ int main(int argc, char **argv) {
 	/*
 		Variables of sending and receiving sections
 	*/
-
+	struct TELNET_PACKET tpacket;
 	char command[STR_MAX];
-	char result[RESULT_MAX];
+	char result[STR_MAXX];
 	int size_received;
 	
 	struct sigaction action;
@@ -174,11 +211,11 @@ int main(int argc, char **argv) {
 
 	sigaction(SIGQUIT, &action, NULL);
 
-	if (role) {// executer
 
-		//Construire un socket local
-		//Construire le socket de la machine que l'on souhaite connecter
-
+	/*
+		WHEN WE ARE AN EXECUTER
+	*/
+	if (role) {
 
 		struct hostent *ht_com = malloc(sizeof(struct hostent));
 
@@ -196,7 +233,7 @@ int main(int argc, char **argv) {
 
 
 		if ((ht_com = gethostbyname(user_params.machinename)) == NULL) {
-			perror("Erreur gethostbyname(...) ");
+			perror("Fail of gethostbyname(...) ");
 			exit(-1);
 		}
 
@@ -216,6 +253,21 @@ int main(int argc, char **argv) {
 			exit(-1);
 		}
 
+
+		//Receive
+		if ((size_received = read(sock_local, result, STR_MAXX)) < 0) {
+			perror("Fail read(...) ");
+			exit(1);
+		}
+
+		telnetPacketParser(result, &tpacket);
+
+		if(tpacket.code == -1){
+			
+			printf("Fail of connection !\n%s\n", tpacket.payload);
+			running = 0; // There are certainly an authentification problem so we leave the program
+		}
+
 		
 		
 		while(running)
@@ -233,9 +285,9 @@ int main(int argc, char **argv) {
 				}
 
 
-				//Recevoir
-				if ((size_received = read(sock_local, result, RESULT_MAX)) < 0) {
-					perror("Echec du read(...) ");
+				//Receive
+				if ((size_received = read(sock_local, result, STR_MAXX)) < 0) {
+					perror("Fail of read(...) ");
 					exit(1);
 				}
 			
@@ -259,27 +311,31 @@ int main(int argc, char **argv) {
 		/*
 			Closing of the local socket of the client 
 		*/
-
+		printf("[myTelnel] Bye-bye ^^\n");
 		if(shutdown(sock_local, 2) == -1)
 		{
-			perror("Echec shutdown(...) ");
+			perror("Fail shutdown(...) ");
 		}
 		if(close(sock_local) == -1)
 		{
-			perror("Echec close(..) [socket local] ");
+			perror("Fail close(..)");
 		}
 	
 	}
+	/*
+		WHEN WE ARE A SERVER
+	*/
 	else 
-	{ //server
+	{
 
 
 		int exec_status;
+		int not_authen=1;
 
 		//File descriptor of the 
-		int sock_local_conn;
+		//int sock_local_conn;
 		
-		int size_addr = sizeof(struct sockaddr_in); // Size of the address structure 
+		socklen_t size_addr = sizeof(struct sockaddr_in); // Size of the address structure 
 		
 		char redirection[STR_MAX];
 		char tmp_files_name[2][STR_MAX];
@@ -309,36 +365,80 @@ int main(int argc, char **argv) {
 			exit(-1);
 		}
 
-		if ( (sock_local_conn = accept(sock_local, (struct sockaddr *) &addr_com, &size_addr)) == -1) {
-			perror("Echec accept(...) ");
-			exit(-1);
-		}
+		do{
+
+			if ( (sock_local_conn = accept(sock_local, (struct sockaddr *) &addr_com, &size_addr)) == -1) {
+				perror("Fail of accept(...) ");
+				exit(-1);
+			}
+
+			/*
+				AUTHENTIFICATION of the client
+			*/
+
+			// We read the username sended by the client
+			if ((size_received = read(sock_local_conn, command, STR_MAX)) < 0) {
+				perror("Fail of read(...) ");
+				exit(-1);
+			}
+
+			// We give to the authentification function the username
+			if (authentification(command)){
+
+				strcpy(result, "Connection success !\n*** [ myTelnet v1 ] ***\n");
+				size_result = strlen(result)+1;
+				//Send
+				if (write(sock_local_conn, result, size_result) == -1) {
+					perror("Erreur write(...) ");
+					exit(-1);
+				}
+				not_authen = 0;
+			}
+			else
+			{
+				sprintf(result, "-1|The username < %s > does not correspond to any user of this server !", command);
+
+				if (write(sock_local_conn, result, strlen(result)+1) == -1) {
+					perror("Erreur write(...) ");
+					exit(-1);
+				}
+
+				//Closing of the local socket
+				if(shutdown(sock_local, 2) == -1)
+				{
+					perror("Error shutdown(...) ");
+				}
+				if(close(sock_local) == -1)
+				{
+					perror("Error close(..) ");
+				}
+
+			}
+
+		}while(not_authen);
+
+
 
 		/*
 			Adjusment of the redirection.
 			Redirection ensure we save the execution result on our file dedicated for that. 
 		*/
 
-		strcpy(redirection, " > ");
+		
 		strcpy(tmp_files_name[0], tmp_folder_path);
 		strcpy(tmp_files_name[1], tmp_folder_path);
-
 		strcat(tmp_files_name[0], ".result_OUT.myTelnet");
 		strcat(tmp_files_name[1], ".result_ERR.myTelnet");
 		
+		strcpy(redirection, " > ");
 		strcat(redirection, tmp_files_name[0]);
 		strcat(redirection, " 2> ");
 		strcat(redirection, tmp_files_name[1]);
 
 
-
-		strcpy(result, "Connection success !\n*** [ myTelnet v1 ] ***\n");
-		//Send
-		if (write(sock_local_conn, result, size_result) == -1) {
-			perror("Erreur write(...) ");
-			exit(-1);
-		}
-
+		/*
+			Begining of the execution's treatment
+		*/
 
 			
 		//Receive
@@ -346,7 +446,7 @@ int main(int argc, char **argv) {
 		{
 			// We read the command sended by the client
 			if ((size_received = read(sock_local_conn, command, STR_MAX)) < 0) {
-				perror("Echec du read(...) ");
+				perror("Fail of read(...) ");
 				exit(-1);
 			}
 
@@ -355,7 +455,7 @@ int main(int argc, char **argv) {
 				//We concatenate the command with the rediraction string
 				strcat(command, redirection);
 				
-				//We determine if the command well has executed
+				//We determine if the command has well been executed
 				exec_status = system(command);
 				exec_status = exec_status ? 1 : 0;
 				
