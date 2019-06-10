@@ -10,6 +10,7 @@ Requirement :
 
 
 Next improvements :
+	• In case where a program already use the port 23, the server should try respectively the ports 8500, and 8501. Then the client should also try these port before finish. Because it is known that 23 is the port of Telnet. 
 	• Improve robustness of the program by using (strncpy, strncat, snprintf, instead of strcpy, strcat, sprintf)
 	• Refactore the code :
 		+ Use more malloc and free instead of constante string to improve the robustness of the programm
