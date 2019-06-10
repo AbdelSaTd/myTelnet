@@ -1,19 +1,20 @@
 The objective of this work is to deliver a program allowing an user to execute commands from a remote machine using TCP/IP. 
 
 Requirement :
-    • Ensure that execute "exit" close the connexion for both (client, server) and ends the program (client)
-	• Ensure that long result from command is sent entirely
+    	• Ensure that execute "exit" close the connexion for both (client, server) and ends the program (client)
+	• Ensure that long result from command is sent entirely (ex: date --help)
 	• Ensure that the user has a session on the server machine (/etc/passwd, for debian based operating system)
-	• Ensure that if one machine become unreachable (exit cases (files access, strings overflow*), program interruption), the other one close properly the connexion.The client finish its execution, the server waits for a new connection. 
+	• Ensure that if one machine become unreachable (exit cases (files access, strings overflow*), program interruption), the other one properly close the connexion. The client then finish its execution, the server waits for a new connexion. 
 
 
 
 
 Next improvements :
+	• Allows the server to execute many client in same time
 	• In case where a program already use the port 23, the server should try respectively the ports 8500, and 8501. Then the client should also try these port before finish. Because it is known that 23 is the port of Telnet. 
-	• Improve robustness of the program by using (strncpy, strncat, snprintf, instead of strcpy, strcat, sprintf)
+	• Improve robustness of the program by using (strncpy, strncat, snprintf, instead of strcpy, strcat, sprintf). Which will prevent strings overflow* annouced above
 	• Refactore the code :
-		+ Use more malloc and free instead of constante string to improve the robustness of the programm
+		+ Use more malloc and free instead of constant string to improve the robustness of the programm
 		+ Change name some of variables, delete superfluous ones to have a more coherent code (ex: command, result)
 
 
@@ -22,6 +23,7 @@ Next improvements :
 
 Test cases :
 
+- Launch program with a wrong format (for example '@', '@hello', 'hello@') => OK
 - Launch client before server => OK
 - Launch server, then client => OK
 	- type exit => OK
