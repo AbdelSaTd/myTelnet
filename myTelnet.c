@@ -96,7 +96,6 @@ int getClientParams(struct telnetParams* p, char* str){
 	char *ptr=strtok(str, "@ ");
 
 	prt_size = strlen(ptr);
-	printf("usernam <%s> \n", ptr);
 	if(prt_size == 0){
 		return -1;
 	}
@@ -110,7 +109,6 @@ int getClientParams(struct telnetParams* p, char* str){
 		return -1;
 	}
 	else{
-		printf("mach <%s> \n", ptr);
 		prt_size = strlen(ptr);
 		if(prt_size == 0){
 			return -1;
