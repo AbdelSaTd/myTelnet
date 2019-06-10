@@ -1,8 +1,9 @@
-- Ensure the client have access on the distant server OK!
-- Manage properly the exit when a error happen (closing of socket, and files) for both client and server.
+The next things to do :
+
+- Refactor the code (malloc)
 - Manage this case :
     When the server exit because of an error (cannot open a file), notify the error to the client before closing the client.
 		Or close the connexion right after the client send a message to the server and get no response
-- Manage a delimiter with more than one character
-- Optimize compilation through Makefile
+- Manage a delimiter with more than one character (more robust)
+
 
