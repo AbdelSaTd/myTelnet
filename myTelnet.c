@@ -32,7 +32,6 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 
-#define READ_MAX 200
 #define STR_MAX 100
 #define STR_MAXX 200
 #define STR_MAXXX 500
@@ -59,6 +58,8 @@ int sock_local_conn;
 
 int ports[] = {23, 8500, 8501}; // Lists of usable port for myTelnet
 int role=1; // 1 => executer (by default), 0 => server
+int file_open=0; // In case of interruption allows to know if a file is currently open
+int ongoing_connexion=0;
 
 char usage[] = "usage: myTelnet [-s | user_name@host_name]\n\nNote: Use SIGQUIT(3) to properly close the server.\n\tFor example : kill -3 pid_of_process\n";
 
@@ -94,10 +95,14 @@ void resetString(char* s){
 int getClientParams(struct telnetParams* p, char* str){
 	int prt_size;
 	char *ptr=strtok(str, "@ ");
-
-	prt_size = strlen(ptr);
-	if(prt_size == 0){
+	if(ptr == NULL){
 		return -1;
+	}
+	else{
+		prt_size = strlen(ptr);
+		if(prt_size == 0){
+			return -1;
+		}
 	}
 
 	p->username = malloc(prt_size);
@@ -148,36 +153,48 @@ void close_socket(int sock_local)
 	}
 }
 
-void quit_myTelnel(){
-	printf("Bye-bye ^^\n");
-	if(role)
-		close_socket(sock_local);
-	else
+void quit_handler(){
+	if(role==0)
 	{
-		close_socket(sock_local_conn);
-		close_socket(sock_local);
-		if( fclose(tmp_result[exec_status]) == EOF){
-			perror("Error fclose(...)");
+		if(ongoing_connexion)
+			close_socket(sock_local_conn);
+
+		if(file_open)
+		{
+			if( fclose(tmp_result[0]) == EOF){
+				perror("Error fclose(...)");
+			}
+			if( fclose(tmp_result[1]) == EOF){
+				perror("Error fclose(...)");
+			}
 		}
+		printf("Server shut down ! \n");
 	}
+
+	close_socket(sock_local);
+	exit(-1);
 	
 }
 
-int authentification(char* ident){
+int authentification(char* ident){ // Return 1 when the username is authentified, 0 if not, and -1 when error
 	FILE* f;
 	char line[USERNAME_MAX];
 	char * ptr;
 	int res = 0;
+
 	if( (f = fopen(abs_path_users_list, "r")) == NULL){
 		printf("Cannot open the users list file : < %s >\n", abs_path_users_list);
-		quit_myTelnel(sock_local);	
+		// Critical error; we have to close the connexion and exit the program.
+		res = -1;
 	}
-
-	while(fgets(line, USERNAME_MAX, f) && !res){
-		ptr = strtok(line, ":");
-		//printf(" <%s> is checked !\n", ptr);
-		res = strcmp(ptr, ident); // strcmp returns 0 when equality others values else
-		res = res ? 0 : 1; // We give 1 to res when equality and 0 else
+	else
+	{
+		while(fgets(line, USERNAME_MAX, f) && !res){
+			ptr = strtok(line, ":");
+			//printf(" <%s> is checked !\n", ptr);
+			res = strcmp(ptr, ident); // strcmp returns 0 when equality others values else
+			res = res ? 0 : 1; // We give 1 to res when equality and 0 else
+		}
 	}
 
 	return res;
@@ -224,7 +241,9 @@ void printSize(char* nom_str, char *str){
 }
 
 
-
+/* 
+	MAIN FUNCTION
+*/
 
 int main(int argc, char **argv) {
 
@@ -275,7 +294,7 @@ int main(int argc, char **argv) {
 	
 	struct sigaction action;
 	
-	action.sa_handler = quit_myTelnel;
+	action.sa_handler = quit_handler;
 	action.sa_flags=0;
 
 	sigaction(SIGQUIT, &action, NULL);
@@ -292,6 +311,10 @@ int main(int argc, char **argv) {
 		if( getClientParams(&user_params, argv[1]) == -1)
 		{
 			printUsage();
+			if(close(sock_local) == -1)
+			{
+				perror("Error close(..)");
+			}
 			exit(-1);
 		}
 
@@ -303,6 +326,10 @@ int main(int argc, char **argv) {
 
 		if ((ht_com = gethostbyname(user_params.machinename)) == NULL) {
 			printf("[ myTelnet ] : Cannot find the host < %s > \n", user_params.machinename);
+			if(close(sock_local) == -1)
+			{
+				perror("Error close(..)");
+			}
 			exit(-1);
 		}
 
@@ -313,6 +340,10 @@ int main(int argc, char **argv) {
 		if (connect(sock_local, (struct sockaddr *) &addr_com, sizeof(addr_com)) == -1)
 		{
 			printf("[ myTelnet ] :  The host < %s > does not respond \n", user_params.machinename);
+			if(close(sock_local) == -1)
+			{
+				perror("Error close(..)");
+			}
 			exit(-1);
 		}
 
@@ -322,17 +353,19 @@ int main(int argc, char **argv) {
 		 * AUTHENTIFICATION : Sending of the username to the server
 		 */
 
-		printf("Sending of username\n");
+		//printf("Sending of username\n");
 		strcpy(command, user_params.username);
 		//Sending
 		if (write(sock_local, command, strlen(command)) == -1) {
-			perror("Erreur write()");
+			perror("Error write(...)");
+			close_socket(sock_local);
 			exit(-1);
 		}
 		//Receiving
 		if ((size_received = read(sock_local, result, STR_MAXXX)) < 0) {
-			perror("Fail read(...) ");
-			exit(1);
+			perror("Error read(...) ");
+			close_socket(sock_local);
+			exit(-1);
 		}
 
 
@@ -340,18 +373,13 @@ int main(int argc, char **argv) {
 		telnetPacketParser(result, &tpacket);
 
 		if(tpacket.code == -1){
-			printf("[ myTelnet ] : Error connexion !\n%s\n", tpacket.payload);
+			printf("[ myTelnet ] : Error connexion :\n%s\n", tpacket.payload);
 			running_session = 0; // There is certainly an authentification problem so we leave the program
 		}
 		else // Authentification succeed
 		{
 			printf("[ myTelnet ] : %s\n", tpacket.payload);
 		}
-
-		free(user_params.username);
-		free(user_params.machinename);
-
-
 
 		while(running_session)
 		{
@@ -368,7 +396,8 @@ int main(int argc, char **argv) {
 			{
 				//Sending
 				if ( (size_sent=write(sock_local, command, strlen(command))) == -1) {
-					perror("Erreur write()");
+					perror("Error write(...)");
+					close_socket(sock_local);
 					exit(-1);
 				}
 
@@ -377,7 +406,8 @@ int main(int argc, char **argv) {
 				//Receive
 				if ((size_received = read(sock_local, result, STR_MAXXX)) < 0) {
 					perror("Error read(...) ");
-					exit(1);
+					close_socket(sock_local);
+					exit(-1);
 				}
 
 				//printf("result received %s\n", result);
@@ -400,8 +430,9 @@ int main(int argc, char **argv) {
 							{
 								//Receive
 								if ((size_received = read(sock_local, result, STR_MAXXX)) < 0) {
-									perror("Error read(...) ");
-									exit(1);
+									perror("Error read(...)");
+									close_socket(sock_local);
+									exit(-1);
 								}
 
 								char_payload_read +=putsCounter(result);
@@ -423,7 +454,8 @@ int main(int argc, char **argv) {
 								//Receive
 								if ((size_received = read(sock_local, result, STR_MAXXX)) < 0) {
 									perror("Error read(...) ");
-									exit(1);
+									close_socket(sock_local);
+									exit(-1);
 								}
 
 								char_payload_read +=putsCounter(result);
@@ -441,18 +473,15 @@ int main(int argc, char **argv) {
 
 		}
 
+
+		free(user_params.username);
+		free(user_params.machinename);
+
 		/*
 			Closing of the local socket of the client 
 		*/
-		printf("[myTelnel] Bye-bye ^^\n");
-		if(shutdown(sock_local, 2) == -1)
-		{
-			perror("Error shutdown(...) ");
-		}
-		if(close(sock_local) == -1)
-		{
-			perror("Error close(..)");
-		}
+		printf("[myTelnel] Bye-bye !\n");
+		close_socket(sock_local);		
 	
 	}
 	/*
@@ -475,6 +504,7 @@ int main(int argc, char **argv) {
 		int size_result;
 		int k;
 		int header_size;
+		int authen_code;
 
 		
 
@@ -491,12 +521,14 @@ int main(int argc, char **argv) {
 		if(bind(sock_local, (struct sockaddr*) &addr_local, size_addr) == -1)
 		{
 			perror("Error bind(...) ");
+			close_socket(sock_local);
 			exit(-1);
 		}
 
 		if (listen(sock_local, 10) == -1)//CONSTANTE 1
 		{
 			perror("Error listen(...) ");
+			close_socket(sock_local);
 			exit(-1);
 		}
 
@@ -524,10 +556,13 @@ int main(int argc, char **argv) {
 				// Waiting for a new connexion (session)
 				if ( (sock_local_conn = accept(sock_local, (struct sockaddr *) &addr_com, &size_addr)) == -1) {
 					perror("Error accept(...) ");
+					close_socket(sock_local);
 					exit(-1);
 				}
 
-				printf("New connexion arrived \n");
+				ongoing_connexion = 1;
+
+				printf("New connexion arrived !\n");
 
 				/*
 					AUTHENTIFICATION of the client
@@ -535,42 +570,63 @@ int main(int argc, char **argv) {
 
 				// We read the username sent by the client
 				if ((size_received = read(sock_local_conn, command, STR_MAXX)) < 0) {
-					perror("Error read(...) ");
-					exit(-1);
-				}
-
-				
-				printf("Authentification processing...\n");
-				// We give to the authentification function the username
-				if(authentification(command)){
-					
-					printf("Connexion succeed !\n< %s > is now connected !\n", command);
-					char success_msg[] = "0¤20¤Connexion success !";
-					size_result = strlen(success_msg)+1; // + '\0'
-					//Send
-					if (write(sock_local_conn, success_msg, size_result) == -1) {
-						perror("Erreur write(...) ");
-						quit_myTelnel();
-						exit(-1);
-					}
-					not_authen = 0;
-					resetString(command);
+					perror("Error read(...) [username] ");
+					close_socket(sock_local_conn);
 				}
 				else
 				{
 
-					printf("Connexion failed !\n");
-					sprintf(result, "-1¤71¤The username < %s > does not correspond to any user of this server !", command);
-
-					if (write(sock_local_conn, result, strlen(result)+1) == -1) {
-						perror("Erreur write(...) ");
-						exit(-1);
+					printf("\tAuthentification processing...\n");
+					// We give to the authentification function the username
+					authen_code = authentification(command);
+					if(authen_code==1)
+					{
+						
+						printf("\tConnexion succeed !\n< %s > is now connected !\n", command);
+						char success_msg[] = "0¤20¤Connexion success !";
+						size_result = strlen(success_msg)+1; // + '\0'
+						//Send
+						if (write(sock_local_conn, success_msg, size_result) == -1) 
+						{
+							perror("Error write(...) ");
+							// We close the connexion and waiting for a new one
+							close_socket(sock_local_conn);
+						}
+						else
+						{
+							not_authen = 0; // The client is well authentified we can start the command's processing
+						}
+						
+						resetString(command);
 					}
+					else // Authentification has failed !
+					{
+						if(authen_code == 0) // The username has not been found in the system
+						{
+							printf("Connexion failed !\n");
+							sprintf(result, "-1¤71¤The username < %s > does not correspond to any user of this machine !", command);
 
-					//Shutting and closing down of the local socket dedicated to the connecxion
-					close_socket(sock_local_conn);
+							if (write(sock_local_conn, result, strlen(result)+1) == -1) {
+								perror("Erreur write(...) ");
+								//Close the connexion (below) and waiting for a new one
+							}
+
+							//Shutting and closing down of the local socket dedicated to the connexion
+							close_socket(sock_local_conn);
+						}
+						else // case -1 : File cannot be found !
+						{
+							// Critical error; we have to close the connexion and exit the program.
+							close_socket(sock_local);
+							exit(-1);
+						}
+						
+					}
 				}
 			}
+
+
+
 
 			/*
 				Begining of the execution's treatment
@@ -578,28 +634,37 @@ int main(int argc, char **argv) {
 
 			while(running_session)
 			{
-				
-
 				// We read the command sent by the client
 				if((size_received = read(sock_local_conn, command, STR_MAXX)) < 0) {
-					perror("Error read(...) ");
-					quit_myTelnel();
-					exit(-1);
+					perror("Error read(...) [client_command]");
+					//We close the connexion and waiting for a new one
+					running_session=0;
+					close_socket(sock_local_conn);
 				}
 
-				if(size_received > 0)
+				
+				if(size_received > 0) // We have received a command we can start the processing
 				{
 					//printf("A session of execution is running...\n");
-					printf("Command received < %s >\n", command);
+					printf("\t\tCommand received < %s >\n", command);
 
 					if(strcmp(command, "exit") /* && strcmp(command, "quit") */)
 					{	
 						//We concatenate the command with the redirection string
 						strcat(command, redirection);
 						
-						//We determine if the command has well been executed
+						//We determine if the command has well been executed, and then which file should be used
 						exec_code = system(command);
 						exec_status = exec_code ? 1 : 0;
+
+
+						/*
+							From here each error that occur is a critical one.
+							Because a command has been executed on the remote machine (server), but it is unable to send back the result.
+							We think that an official program should at least notify the client about this situation before finish its execution (a server which has an internal problem is no longer useful). 
+							Which will bring another step of verification.
+							So for simplification here we decide to simply close the connexion and exit the program. 
+						*/
 
 
 						for(int i=0; i<2; i++)
@@ -607,10 +672,11 @@ int main(int argc, char **argv) {
 							if( (tmp_result[i] = fopen(tmp_files_name[i], "r")) == NULL)
 							{
 								printf("Cannot open file: %s \n", tmp_files_name[i]);
-								quit_myTelnel();
+								close_socket(sock_local);
 								exit(-1);
 							}
 						}
+						file_open=1;
 
 						char dest_sprintf[STR_MAX];
 					
@@ -620,7 +686,6 @@ int main(int argc, char **argv) {
 						//printf("res = %s (i=%d=strlen(res))\n", result, i);
 						//printf("Res from file < ");
 
-						
 						
 						k=0;
 						while( (c = getc(tmp_result[exec_status])) != EOF) 
@@ -632,23 +697,23 @@ int main(int argc, char **argv) {
 						strcat(header, dest_sprintf);
 						header_size = strlen(header);
 						size_result=header_size+k+1; // + '\0'
-						printSize("header", header);
-						printf("hearSize %d\n", header_size);
+						//printSize("header", header);
+						//printf("hearSize %d\n", header_size);
 
 						if( (result_command = malloc((size_result)*sizeof(char))) == NULL){
 							perror("Error malloc(...)");
-							//Proper exit
-							quit_myTelnel();
+							close_socket(sock_local);
 							exit(-1);
 						}
 
-						printf(" k=%d,  size_result=%d\n", k, size_result);
+						//printf(" k=%d,  size_result=%d\n", k, size_result);
 				
 
+						// Move back the cursor at the beginning of the file
 						if(fseek(tmp_result[exec_status], 0, SEEK_SET) != 0){
 							perror("Error fseek(...)");
 							//Proper exit
-							quit_myTelnel();
+							close_socket(sock_local);
 							exit(-1);
 						}
 
@@ -662,20 +727,25 @@ int main(int argc, char **argv) {
 						}
 						result_command[k]='\0';
 
-						printf("Res {*** %s ***} (%d)\n", result_command, size_result);
+						printf("\t\tRes {*** %s ***} (%d)\n", result_command, size_result);
 
 						//Send
 						if (write(sock_local_conn, result_command, size_result) == -1) {
-							perror("Error write(...) ");
-							quit_myTelnel();
-							exit(-1);
+							perror("Error write(...) [result]");
+							//Here again we can close the connexion and waiting for a new one
+							running_session=0;
+							close_socket(sock_local_conn);
 						}
 
 						resetString(command);
 						free(result_command);
+						fclose(tmp_result[0]);
+						fclose(tmp_result[1]);
+						file_open=0;
+						
 
 					}
-					else{// We leave the program, exit has been typed
+					else{//Exit has been typed, we leave the program 
 
 						printf("The connexion ended \n");
 						strcpy(result, "-1¤22¤**Connexion closed**"); // Note that '¤' count for 2 char 
@@ -683,22 +753,14 @@ int main(int argc, char **argv) {
 						//Send
 						if (write(sock_local_conn, result, size_result) == -1) {
 							perror("Error write(...) ");
-							quit_myTelnel();
-							exit(-1);
 						}
 
 						running_session = 0;
-
-						//Closing of the local socket
-						if(shutdown(sock_local_conn, 2) == -1)
-						{
-							perror("Error shutdown(...) ");
-						}
-						if(close(sock_local_conn) == -1)
-						{
-							perror("Error close(...) ");
-						}
+						//We close the connexion and waiting for a new one
+						close_socket(sock_local_conn);
+					
 					}
+					ongoing_connexion = 0;
 				}
 				
 			}
