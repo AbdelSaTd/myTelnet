@@ -1,5 +1,29 @@
-The objective of this work is to deliver a program allowing a user to execute command from a distant machine using TCP/IP. 
+The objective of this work is to deliver a program allowing an user to execute commands from a remote machine using TCP/IP. 
 
-Exigences :
-    • Secure the input
-    • Ensure that execute "exit" close the connextion and ends the command
+Requirement :
+    • Ensure that execute "exit" close the connexion for both (client, server) and ends the program (client)
+	• Ensure that long result from command is sent entirely
+	• Ensure that the user has a session on the server machine (/etc/passwd, for debian based operating system)
+	• Ensure that if one machine become unreachable (exit cases (files access, strings overflow*), program interruption), the other one close properly the connexion.The client finish its execution, the server waits for a new connection. 
+
+
+
+
+Next improvements :
+	• Improve robustness of the program by using (strncpy, strncat, snprintf, instead of strcpy, strcat, sprintf)
+	• Refactore the code :
+		+ Use more malloc and free instead of constante string to improve the robustness of the programm
+		+ Change name some of variables, delete superfluous ones to have a more coherent code (ex: command, result)
+
+
+
+
+
+Test cases :
+
+- Launch client before server => OK
+- Launch server, then client => OK
+	- type exit => OK
+	- type enter => OK
+	- type a command without parameter (ex: date) => OK
+	- type command with parameter (ex: date --help) => OK
