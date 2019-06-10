@@ -325,7 +325,7 @@ int main(int argc, char **argv) {
 
 
 		if ((ht_com = gethostbyname(user_params.machinename)) == NULL) {
-			printf("[ myTelnet ] : Cannot find the host < %s > \n", user_params.machinename);
+			printf("Cannot find the host < %s > \n", user_params.machinename);
 			if(close(sock_local) == -1)
 			{
 				perror("Error close(..)");
@@ -339,7 +339,7 @@ int main(int argc, char **argv) {
 
 		if (connect(sock_local, (struct sockaddr *) &addr_com, sizeof(addr_com)) == -1)
 		{
-			printf("[ myTelnet ] :  The host < %s > does not respond \n", user_params.machinename);
+			printf("The host < %s > does not respond \n", user_params.machinename);
 			if(close(sock_local) == -1)
 			{
 				perror("Error close(..)");
@@ -373,12 +373,12 @@ int main(int argc, char **argv) {
 		telnetPacketParser(result, &tpacket);
 
 		if(tpacket.code == -1){
-			printf("[ myTelnet ] : Error connexion :\n%s\n", tpacket.payload);
+			printf("Error connexion :\n%s\n", tpacket.payload);
 			running_session = 0; // There is certainly an authentification problem so we leave the program
 		}
 		else // Authentification succeed
 		{
-			printf("[ myTelnet ] : %s\n", tpacket.payload);
+			printf("%s\n", tpacket.payload);
 		}
 
 		while(running_session)
@@ -445,7 +445,7 @@ int main(int argc, char **argv) {
 						break;
 					
 					default://Command has failed
-						printf("[ myTelnet ]: Command fails !\nErrorCode< %d >\n\n", tpacket.code);
+						printf("Command fails | ErrorCode< %d >\n\n", tpacket.code);
 						if(tpacket.pyld_size > 0){
 							char_payload_read = putsCounter(tpacket.payload); // puts while counting the number of character which is returned 
 
@@ -480,7 +480,7 @@ int main(int argc, char **argv) {
 		/*
 			Closing of the local socket of the client 
 		*/
-		printf("[myTelnel] Bye-bye !\n");
+		printf("Bye-bye !\n");
 		close_socket(sock_local);		
 	
 	}
