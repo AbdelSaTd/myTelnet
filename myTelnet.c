@@ -91,7 +91,7 @@ void resetString(char* s){
 
 
 
-int getTelnetParams(struct telnetParams* p, char* str){
+int getClientParams(struct telnetParams* p, char* str){
 	int prt_size;
 	char *ptr=strtok(str, "@ ");
 
@@ -284,7 +284,7 @@ int main(int argc, char **argv) {
 		struct hostent *ht_com = malloc(sizeof(struct hostent));
 		int char_payload_read;
 		
-		if( getTelnetParams(&user_params, argv[1]) == -1)
+		if( getClientParams(&user_params, argv[1]) == -1)
 		{
 			printUsage();
 			exit(-1);
