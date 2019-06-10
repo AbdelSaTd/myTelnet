@@ -1,11 +1,20 @@
 /*
 	This implementation aims to developed skills on C and usage of the socket API for TCP.
-	We have kept to ensure our code enjoyable to read through comments in order
-	to facilitate reuse of any part of this code quickly.
+	This code is commented as mush as possible in order to facilitate the reuse of any part of this code quickly.
 
-	The program allows an user to execute commands on a distant machine. 
+	The port 23 has been used by default.
 
-	@Author : Abdel Saïd TARNAGDA, student at INSA Toulouse (National Applied Science Institute Toulouse)
+	The program allows an user to execute commands on a remote machine. 
+
+	Fomat of the usage :
+
+	Client
+	myTelnet user_name@server_name
+
+	Server
+	myTelnet -s
+
+	@Author : Abdel Saïd TARNAGDA, student in Computer Engineering at INSA Toulouse (National Applied Science Institute Toulouse)
 	@Licence : MIT Licence
 
 */
@@ -51,7 +60,7 @@ int sock_local_conn;
 int ports[] = {23, 8500, 8501}; // Lists of usable port for myTelnet
 int role=1; // 1 => executer (by default), 0 => server
 
-char usage[] = "usage: myTelnet -s | user_name@host_name\n Note: Use SIGQUIT(3) to properly close the server.\n\tFor example : kill -3 pid_of_process";
+char usage[] = "usage: myTelnet [-s | user_name@host_name]\n Note: Use SIGQUIT(3) to properly close the server.\n\tFor example : kill -3 pid_of_process";
 
 //Sur Ubuntu
 char tmp_folder_path[] = "/tmp/";
@@ -81,17 +90,6 @@ void resetString(char* s){
 }
 
 
-/*
-
-	Fomat of the usage :
-
-	Executer
-	myTelnet user_name@server_name
-
-	Server
-	myTelnet -s
-
-*/
 
 int getTelnetParams(struct telnetParams* p, char* str){
 	int prt_size;
