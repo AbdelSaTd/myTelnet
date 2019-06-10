@@ -60,7 +60,7 @@ int sock_local_conn;
 int ports[] = {23, 8500, 8501}; // Lists of usable port for myTelnet
 int role=1; // 1 => executer (by default), 0 => server
 
-char usage[] = "usage: myTelnet [-s | user_name@host_name]\n Note: Use SIGQUIT(3) to properly close the server.\n\tFor example : kill -3 pid_of_process";
+char usage[] = "usage: myTelnet [-s | user_name@host_name]\n\nNote: Use SIGQUIT(3) to properly close the server.\n\tFor example : kill -3 pid_of_process\n";
 
 //Sur Ubuntu
 char tmp_folder_path[] = "/tmp/";
@@ -96,6 +96,7 @@ int getClientParams(struct telnetParams* p, char* str){
 	char *ptr=strtok(str, "@ ");
 
 	prt_size = strlen(ptr);
+	printf("usernam <%s> \n", ptr);
 	if(prt_size == 0){
 		return -1;
 	}
@@ -105,9 +106,15 @@ int getClientParams(struct telnetParams* p, char* str){
 
 	ptr = strtok(NULL, "@ ");
 
-	prt_size = strlen(ptr);
-	if(prt_size == 0){
+	if(ptr == NULL){
 		return -1;
+	}
+	else{
+		printf("mach <%s> \n", ptr);
+		prt_size = strlen(ptr);
+		if(prt_size == 0){
+			return -1;
+		}
 	}
 
 	p->machinename = malloc(prt_size);
@@ -297,17 +304,21 @@ int main(int argc, char **argv) {
 
 
 		if ((ht_com = gethostbyname(user_params.machinename)) == NULL) {
-			perror("Error gethostbyname(...) ");
+			printf("[ myTelnet ] : Cannot find the host < %s > \n", user_params.machinename);
 			exit(-1);
 		}
+
+		
 
 		memcpy((char *) &(addr_com.sin_addr.s_addr), ht_com->h_addr, ht_com->h_length);
 
 		if (connect(sock_local, (struct sockaddr *) &addr_com, sizeof(addr_com)) == -1)
 		{
-			printf("[ myTelnet ] : Cannot find the host < %s > \n", user_params.machinename);
+			printf("[ myTelnet ] :  The host < %s > does not respond \n", user_params.machinename);
 			exit(-1);
 		}
+
+		
 
 		/*
 		 * AUTHENTIFICATION : Sending of the username to the server
@@ -338,6 +349,11 @@ int main(int argc, char **argv) {
 		{
 			printf("[ myTelnet ] : %s\n", tpacket.payload);
 		}
+
+		free(user_params.username);
+		free(user_params.machinename);
+
+
 
 		while(running_session)
 		{
