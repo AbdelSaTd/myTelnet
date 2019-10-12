@@ -4,7 +4,7 @@
 
 	The port 23 has been used by default.
 
-	The program allows an user to execute commands on a remote machine. 
+	The program allows an user to execute commands on a remote machine based on debian architecture. 
 
 	Fomat of the usage :
 
